@@ -1,0 +1,1 @@
+export const API_BASE_URL = "https://smriticare-3q3c.onrender.com";
