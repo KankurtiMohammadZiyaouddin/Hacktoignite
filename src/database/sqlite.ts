@@ -709,50 +709,140 @@ class PersistentDatabaseFallback implements IDatabase {
   }
 }
 
-let dbInstance: IDatabase | null = null;
-let isInitialized = false;
+class SafeDatabaseWrapper implements IDatabase {
+  private nativeDb: any;
+  private fallback: PersistentDatabaseFallback;
+  private queue: Promise<any> = Promise.resolve();
+  private isNativeFailed = false;
 
-/**
- * Initializes the SQLite database or transparent
- * persistent AsyncStorage fallback.
- */
-export async function initDatabase(): Promise<IDatabase> {
-  if (isInitialized && dbInstance) {
-    return dbInstance;
+  constructor(nativeDb: any, fallback: PersistentDatabaseFallback) {
+    this.nativeDb = nativeDb;
+    this.fallback = fallback;
   }
 
-  if (Platform.OS !== 'web') {
-    try {
-      const SQLite = await import('expo-sqlite');
-      if (SQLite && typeof SQLite.openDatabaseAsync === 'function') {
-        const nativeDb = await SQLite.openDatabaseAsync('smriticare.db');
-        await nativeDb.execAsync(CREATE_TABLES_SQL);
-        dbInstance = nativeDb as unknown as IDatabase;
-        isInitialized = true;
-        return dbInstance;
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const next = this.queue.then(async () => {
+      if (this.isNativeFailed) {
+        throw new Error('Native SQLite disabled due to previous failure');
       }
-    } catch (nativeErr) {
-      console.warn('Native SQLite unavailable, using persistent fallback:', nativeErr);
+      return await operation();
+    });
+    this.queue = next.catch(() => {});
+    return next;
+  }
+
+  private sanitizeParams(params: any[]): any[] {
+    return params.map((p) => (p === undefined ? null : p));
+  }
+
+  async execAsync(query: string): Promise<void> {
+    if (this.isNativeFailed) {
+      return this.fallback.execAsync(query);
+    }
+    try {
+      return await this.enqueue(() => this.nativeDb.execAsync(query));
+    } catch (err) {
+      console.warn('Native execAsync error, falling back to AsyncStorage:', err);
+      this.isNativeFailed = true;
+      return this.fallback.execAsync(query);
     }
   }
 
-  // Persistent AsyncStorage storage engine for Expo Go, Native fallback, and Web
-  const fallback = new PersistentDatabaseFallback();
-  await fallback.init();
+  async runAsync(
+    statement: string,
+    ...params: any[]
+  ): Promise<{ changes: number; lastInsertRowId: number }> {
+    const sanitized = this.sanitizeParams(params);
+    if (this.isNativeFailed) {
+      return this.fallback.runAsync(statement, ...sanitized);
+    }
+    try {
+      return await this.enqueue(() => this.nativeDb.runAsync(statement, ...sanitized));
+    } catch (err) {
+      console.warn('Native runAsync error, falling back to AsyncStorage:', err);
+      this.isNativeFailed = true;
+      return this.fallback.runAsync(statement, ...sanitized);
+    }
+  }
 
-  dbInstance = fallback;
-  isInitialized = true;
+  async getAllAsync<T = any>(statement: string, ...params: any[]): Promise<T[]> {
+    const sanitized = this.sanitizeParams(params);
+    if (this.isNativeFailed) {
+      return this.fallback.getAllAsync<T>(statement, ...sanitized);
+    }
+    try {
+      return await this.enqueue(() => this.nativeDb.getAllAsync(statement, ...sanitized));
+    } catch (err) {
+      console.warn('Native getAllAsync error, falling back to AsyncStorage:', err);
+      this.isNativeFailed = true;
+      return this.fallback.getAllAsync<T>(statement, ...sanitized);
+    }
+  }
 
-  return fallback;
+  async getFirstAsync<T = any>(
+    statement: string,
+    ...params: any[]
+  ): Promise<T | null> {
+    const sanitized = this.sanitizeParams(params);
+    if (this.isNativeFailed) {
+      return this.fallback.getFirstAsync<T>(statement, ...sanitized);
+    }
+    try {
+      return await this.enqueue(() => this.nativeDb.getFirstAsync(statement, ...sanitized));
+    } catch (err) {
+      console.warn('Native getFirstAsync error, falling back to AsyncStorage:', err);
+      this.isNativeFailed = true;
+      return this.fallback.getFirstAsync<T>(statement, ...sanitized);
+    }
+  }
+}
+
+let dbInstance: IDatabase | null = null;
+let initPromise: Promise<IDatabase> | null = null;
+
+/**
+ * Initializes the SQLite database or transparent
+ * persistent AsyncStorage fallback with race-condition prevention.
+ */
+export async function initDatabase(): Promise<IDatabase> {
+  if (dbInstance) {
+    return dbInstance;
+  }
+  if (initPromise) {
+    return initPromise;
+  }
+
+  initPromise = (async () => {
+    const fallback = new PersistentDatabaseFallback();
+    await fallback.init();
+
+    if (Platform.OS !== 'web') {
+      try {
+        const SQLite = await import('expo-sqlite');
+        if (SQLite && typeof SQLite.openDatabaseAsync === 'function') {
+          const nativeDb = await SQLite.openDatabaseAsync('smriticare.db');
+          await nativeDb.execAsync(CREATE_TABLES_SQL);
+          dbInstance = new SafeDatabaseWrapper(nativeDb, fallback);
+          return dbInstance;
+        }
+      } catch (nativeErr) {
+        console.warn('Native SQLite unavailable, using persistent fallback:', nativeErr);
+      }
+    }
+
+    dbInstance = fallback;
+    return fallback;
+  })();
+
+  return initPromise;
 }
 
 /**
  * Gets the current database instance.
  */
 export async function getDatabase(): Promise<IDatabase> {
-  if (!isInitialized || !dbInstance) {
-    return initDatabase();
+  if (dbInstance) {
+    return dbInstance;
   }
-
-  return dbInstance;
+  return initDatabase();
 }
