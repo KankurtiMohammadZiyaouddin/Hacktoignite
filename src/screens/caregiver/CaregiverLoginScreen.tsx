@@ -48,23 +48,31 @@ export default function CaregiverLoginScreen({
 
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const showFeedback = (title: string, message: string) => {
+    if (Platform.OS === "web") {
+      window.alert(`${title}\n\n${message}`);
+      return;
+    }
+    Alert.alert(title, message);
+  };
 
   const handleLogin = async () => {
-    const cleanEmail = email.trim();
+    const cleanEmail = email.trim().toLowerCase();
+    setErrorMessage(null);
 
     if (!cleanEmail) {
-      Alert.alert(
-        "Missing information",
-        "Please enter your email.",
-      );
+      const msg = "Please enter your email address.";
+      setErrorMessage(msg);
+      showFeedback("Missing information", msg);
       return;
     }
 
     if (!password) {
-      Alert.alert(
-        "Missing information",
-        "Please enter your password.",
-      );
+      const msg = "Please enter your password.";
+      setErrorMessage(msg);
+      showFeedback("Missing information", msg);
       return;
     }
 
@@ -99,10 +107,8 @@ export default function CaregiverLoginScreen({
           ? error.message
           : "Unable to sign in. Please try again.";
 
-      Alert.alert(
-        "Sign In Failed",
-        message,
-      );
+      setErrorMessage(message);
+      showFeedback("Sign In Failed", message);
     } finally {
       setLoading(false);
     }
@@ -160,6 +166,19 @@ export default function CaregiverLoginScreen({
         </Text>
 
         <View style={styles.form}>
+          {errorMessage ? (
+            <View style={styles.errorBanner}>
+              <MaterialIcons
+                name="error-outline"
+                size={20}
+                color="#BA1A1A"
+              />
+              <Text style={styles.errorBannerText}>
+                {errorMessage}
+              </Text>
+            </View>
+          ) : null}
+
           <Text style={styles.label}>
             Email Address
           </Text>
@@ -173,7 +192,10 @@ export default function CaregiverLoginScreen({
 
             <TextInput
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(val) => {
+                setEmail(val);
+                if (errorMessage) setErrorMessage(null);
+              }}
               placeholder="Enter your email"
               placeholderTextColor="#8A9187"
               keyboardType="email-address"
@@ -202,7 +224,10 @@ export default function CaregiverLoginScreen({
 
             <TextInput
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(val) => {
+                setPassword(val);
+                if (errorMessage) setErrorMessage(null);
+              }}
               placeholder="Enter your password"
               placeholderTextColor="#8A9187"
               secureTextEntry={!showPassword}
@@ -560,5 +585,25 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     lineHeight: 20,
     color: COLORS.textSecondary,
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFEDEA",
+    borderWidth: 1,
+    borderColor: "#FFB4AB",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+    width: "100%",
+  },
+  errorBannerText: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#BA1A1A",
+    lineHeight: 19,
   },
 });

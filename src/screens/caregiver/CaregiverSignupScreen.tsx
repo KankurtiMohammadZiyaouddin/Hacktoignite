@@ -48,48 +48,58 @@ export default function CaregiverSignupScreen({
         useState(false);
 
     const [loading, setLoading] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+    const showFeedback = (title: string, message: string, onOk?: () => void) => {
+        if (Platform.OS === "web") {
+            window.alert(`${title}\n\n${message}`);
+            if (onOk) onOk();
+            return;
+        }
+        if (onOk) {
+            Alert.alert(title, message, [{ text: "Continue", onPress: onOk }]);
+        } else {
+            Alert.alert(title, message);
+        }
+    };
 
     const handleSignup = async () => {
         const cleanName = fullName.trim();
-        const cleanEmail = email.trim();
+        const cleanEmail = email.trim().toLowerCase();
+        setErrorMessage(null);
 
         if (!cleanName) {
-            Alert.alert(
-                "Missing information",
-                "Please enter your full name.",
-            );
+            const msg = "Please enter your full name.";
+            setErrorMessage(msg);
+            showFeedback("Missing information", msg);
             return;
         }
 
         if (!cleanEmail) {
-            Alert.alert(
-                "Missing information",
-                "Please enter your email.",
-            );
+            const msg = "Please enter your email.";
+            setErrorMessage(msg);
+            showFeedback("Missing information", msg);
             return;
         }
 
         if (!password) {
-            Alert.alert(
-                "Missing information",
-                "Please enter a password.",
-            );
+            const msg = "Please enter a password.";
+            setErrorMessage(msg);
+            showFeedback("Missing information", msg);
             return;
         }
 
         if (password.length < 6) {
-            Alert.alert(
-                "Invalid password",
-                "Password must be at least 6 characters.",
-            );
+            const msg = "Password must be at least 6 characters.";
+            setErrorMessage(msg);
+            showFeedback("Invalid password", msg);
             return;
         }
 
         if (password !== confirmPassword) {
-            Alert.alert(
-                "Passwords do not match",
-                "Please make sure both passwords are the same.",
-            );
+            const msg = "Please make sure both passwords are the same.";
+            setErrorMessage(msg);
+            showFeedback("Passwords do not match", msg);
             return;
         }
 
@@ -104,15 +114,10 @@ export default function CaregiverSignupScreen({
 
             setLoading(false);
 
-            Alert.alert(
+            showFeedback(
                 "Account Created",
                 "Your caregiver account has been created successfully.",
-                [
-                    {
-                        text: "Continue",
-                        onPress: onSignup,
-                    },
-                ],
+                onSignup,
             );
         } catch (error) {
             setLoading(false);
@@ -122,10 +127,8 @@ export default function CaregiverSignupScreen({
                     ? error.message
                     : "Unable to create your account.";
 
-            Alert.alert(
-                "Sign Up Failed",
-                message,
-            );
+            setErrorMessage(message);
+            showFeedback("Sign Up Failed", message);
         }
     };
 
@@ -181,6 +184,19 @@ export default function CaregiverSignupScreen({
                 </Text>
 
                 <View style={styles.form}>
+                    {errorMessage ? (
+                        <View style={styles.errorBanner}>
+                            <MaterialIcons
+                                name="error-outline"
+                                size={20}
+                                color="#BA1A1A"
+                            />
+                            <Text style={styles.errorBannerText}>
+                                {errorMessage}
+                            </Text>
+                        </View>
+                    ) : null}
+
                     <Text style={styles.label}>
                         Full Name
                     </Text>
@@ -194,7 +210,10 @@ export default function CaregiverSignupScreen({
 
                         <TextInput
                             value={fullName}
-                            onChangeText={setFullName}
+                            onChangeText={(val) => {
+                                setFullName(val);
+                                if (errorMessage) setErrorMessage(null);
+                            }}
                             placeholder="Enter your full name"
                             placeholderTextColor="#8A9187"
                             autoCapitalize="words"
@@ -589,5 +608,25 @@ const styles = StyleSheet.create({
         fontSize: 13.5,
         lineHeight: 20,
         color: COLORS.textSecondary,
+    },
+    errorBanner: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#FFEDEA",
+        borderWidth: 1,
+        borderColor: "#FFB4AB",
+        borderRadius: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        marginBottom: 16,
+        width: "100%",
+    },
+    errorBannerText: {
+        flex: 1,
+        marginLeft: 10,
+        fontSize: 14,
+        fontWeight: "600",
+        color: "#BA1A1A",
+        lineHeight: 19,
     },
 });
