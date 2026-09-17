@@ -42,3 +42,6 @@ yarn-error.*
 
 # Local database backups
 *.sql
+
+# User-uploaded media
+backend/uploads/
