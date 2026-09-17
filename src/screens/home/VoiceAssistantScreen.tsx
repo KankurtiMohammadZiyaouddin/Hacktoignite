@@ -11,10 +11,37 @@ import {
 } from "react-native";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
-import {
-  ExpoSpeechRecognitionModule,
-  useSpeechRecognitionEvent,
-} from "expo-speech-recognition";
+let ExpoSpeechRecognitionModule: any = null;
+let addSpeechRecognitionListener: any = null;
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const speechPkg = require("expo-speech-recognition");
+  ExpoSpeechRecognitionModule = speechPkg?.ExpoSpeechRecognitionModule ?? null;
+  addSpeechRecognitionListener = speechPkg?.addSpeechRecognitionListener ?? null;
+} catch {
+  ExpoSpeechRecognitionModule = null;
+  addSpeechRecognitionListener = null;
+}
+
+function useSpeechRecognitionEvent(
+  event: string,
+  listener: (...args: any[]) => void,
+) {
+  useEffect(() => {
+    if (!addSpeechRecognitionListener || !ExpoSpeechRecognitionModule) {
+      return;
+    }
+    try {
+      const subscription = addSpeechRecognitionListener(event, listener);
+      return () => {
+        subscription?.remove?.();
+      };
+    } catch {
+      // Safe no-op on platforms where native module is unavailable
+    }
+  }, [event, listener]);
+}
 
 const COLORS = {
   background: "#FBF9F1",
@@ -245,10 +272,22 @@ export default function VoiceAssistantScreen({
 
   useEffect(() => {
     try {
+      if (
+        !ExpoSpeechRecognitionModule ||
+        typeof ExpoSpeechRecognitionModule.isRecognitionAvailable !== "function"
+      ) {
+        setSpeechAvailable(false);
+        setAssistantState("error");
+        setMessage(
+          "Speech recognition requires a development build (expo-dev-client). You can still tap quick actions below.",
+        );
+        return;
+      }
+
       const available =
         ExpoSpeechRecognitionModule.isRecognitionAvailable();
 
-      setSpeechAvailable(available);
+      setSpeechAvailable(Boolean(available));
 
       if (!available) {
         setAssistantState("error");
@@ -264,6 +303,10 @@ export default function VoiceAssistantScreen({
       );
 
       setSpeechAvailable(false);
+      setAssistantState("error");
+      setMessage(
+        "Voice assistant requires a development build. You can tap quick actions below.",
+      );
     }
   }, []);
 
@@ -623,7 +666,9 @@ export default function VoiceAssistantScreen({
     }
 
     try {
-      ExpoSpeechRecognitionModule.stop();
+      if (ExpoSpeechRecognitionModule?.stop) {
+        ExpoSpeechRecognitionModule.stop();
+      }
 
       setAssistantState("processing");
 
