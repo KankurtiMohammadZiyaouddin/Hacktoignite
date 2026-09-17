@@ -45,3 +45,9 @@ yarn-error.*
 
 # User-uploaded media
 backend/uploads/
+
+# Backend agent/development folders
+backend/.agents/
+backend/.claude/
+backend/.cursor/
+backend/.devin/
